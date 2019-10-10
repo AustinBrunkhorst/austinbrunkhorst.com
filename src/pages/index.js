@@ -1,14 +1,16 @@
 import * as React from 'react';
 import { graphql, Link } from 'gatsby';
+import Image from "gatsby-image";
 
 const IndexPage = ({
   data: {
     site: { siteMetadata: { social } },
+    dog,
     allBlogPost: { edges: latestBlogPosts },
   },
 }) => {
   const [LatestBlogPost] = latestBlogPosts
-    .map(({ node: { title, slug } }) => <Link to={slug}>{title}</Link>);
+    .map(({ node: { title, slug } }) => (<>📖 <Link to={slug}>{title}</Link></>));
 
   const socialUrls = social.reduce(
     (urls, { name, url }) => ({ [name]: url, ...urls }),
@@ -17,8 +19,11 @@ const IndexPage = ({
   
   return (
     <>
-      <Bio urls={socialUrls} />
-      {LatestBlogPost}
+      <div style={{ marginBottom: 24 }}>
+        <Bio urls={socialUrls} />
+        {LatestBlogPost}
+      </div>
+      <Image fixed={dog.childImageSharp.fixed} alt="dog.jpg" />
     </>
   );
 };
@@ -38,6 +43,13 @@ export const pageQuery = graphql`
         social {
           name
           url
+        }
+      }
+    }
+    dog: file(absolutePath: { regex: "/dog.jpg/" }) {
+      childImageSharp {
+        fixed(width: 1024, height: 1024) {
+          ...GatsbyImageSharpFixed
         }
       }
     }
