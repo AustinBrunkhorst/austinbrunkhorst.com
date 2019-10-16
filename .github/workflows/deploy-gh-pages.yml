@@ -13,5 +13,6 @@ jobs:
       - uses: enriikke/gatsby-gh-pages-action@v2
         with:
           access-token: ${{ secrets.GITHUB_ACCESS_TOKEN }}
+          deploy-branch: gh-pages
         env:
           CI: true
