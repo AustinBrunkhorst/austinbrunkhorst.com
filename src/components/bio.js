@@ -25,8 +25,7 @@ const Bio = () => {
     }
   `)
 
-  const { author } = data.site.siteMetadata
-  const refUrl = encodeURIComponent(window.location.href);
+  const { author, siteUrl } = data.site.siteMetadata
   return (
     <div
       style={{
@@ -52,7 +51,7 @@ const Bio = () => {
           Greetings human! I'm <strong>{author}</strong>, and I like to make all the things.
         </p>
         <p>
-          Follow on <a href={`https://twitter.com/intent/follow?original_referer=${refUrl}&ref_src=twsrc%5Etfw&region=follow_link&screen_name=abrunkhorst&tw_p=followbutton`}>Twitter</a> or <a href="https://github.com/AustinBrunkhorst">GitHub</a>.
+          Follow on <a href={`https://twitter.com/intent/follow?original_referer=${encodeURIComponent(siteUrl)}&ref_src=twsrc%5Etfw&region=follow_link&screen_name=abrunkhorst&tw_p=followbutton`}>Twitter</a> or <a href="https://github.com/AustinBrunkhorst">GitHub</a>.
         </p>
       </div>
     </div>
