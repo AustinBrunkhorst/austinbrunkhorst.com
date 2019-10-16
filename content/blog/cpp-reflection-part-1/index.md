@@ -1,14 +1,9 @@
 ---
 title: C++ Reflection
-date: 2019-06-16
+description: Turn your code into more code.
+date: 2016-06-16
 tags: ["c", "reflection", "meta", "introspection", "code-generation", "clang", "llvm", "game-development", "software"]
 ---
-
-Back in September (*2015*), I did a little write-up on my experiences and approach to building a complete reflection pipeline in C++. At that time, I didn't have a blog setup, so I just included the details in the README of the [GitHub repository](https://github.com/AustinBrunkhorst/CPP-Reflection) where the code lived.
-
-I have since refactored that code and the pipeline after using it extensively on my game team. The response from the community has been great enough that I decided to start a blog in general and continue the write-ups. The rest of this post is taken directly from the README, so any references to a repository are talking about [this](https://github.com/AustinBrunkhorst/CPP-Reflection).
-
-<hr />
 
 ## Preface
 
@@ -60,7 +55,7 @@ CMake makes this pipeline surprisingly simple which was a relief. I won't go int
 
 Here's a diagram of the entire pipeline from writing the source, to building your game / application.
 
-![Pipeline Diagram](https://imgur.com/V7RLPAj.png)
+![Pipeline Diagram](./diagram.png)
 
 ## Code
 
