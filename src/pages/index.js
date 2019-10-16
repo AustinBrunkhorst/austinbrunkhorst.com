@@ -1,67 +1,75 @@
-import * as React from 'react';
-import { graphql, Link } from 'gatsby';
-import Image from "gatsby-image";
+import React from "react"
+import { Link, graphql } from "gatsby"
 
-const IndexPage = ({
-  data: {
-    site: { siteMetadata: { social } },
-    dog,
-    allBlogPost: { edges: latestBlogPosts },
-  },
-}) => {
-  const [LatestBlogPost] = latestBlogPosts
-    .map(({ node: { title, slug } }) => (<>📖 <Link to={slug}>{title}</Link></>));
+import Bio from "../components/bio"
+import Layout from "../components/layout"
+import SEO from "../components/seo"
+import { rhythm } from "../utils/typography"
 
-  const socialUrls = social.reduce(
-    (urls, { name, url }) => ({ [name]: url, ...urls }),
-    {}
-  );
-  
-  return (
-    <>
-      <div style={{ marginBottom: 24 }}>
-        <Bio urls={socialUrls} />
-        {LatestBlogPost}
-      </div>
-      <Image fixed={dog.childImageSharp.fixed} alt="dog.jpg" />
-    </>
-  );
-};
+class BlogIndex extends React.Component {
+  render() {
+    const { data } = this.props
+    const siteTitle = data.site.siteMetadata.title
+    const posts = data.allMarkdownRemark.edges
 
-const Bio = ({ urls }) => {
-  return <>
-    <h2>greetings human! my name is</h2>
-    <h1>Austin Brunkhorst</h1>
-    <p>I like to make all the things. Check out my <a href={urls.github}>code</a> or my <a href={urls.linkedin}>resume</a>.</p>
-  </>
-};
+    return (
+      <Layout location={this.props.location} title={siteTitle}>
+        <SEO title="It could be anything." />
+        <Bio />
+        {posts.map(({ node }) => {
+          const title = node.frontmatter.title || node.fields.slug
+          return (
+            <article key={node.fields.slug}>
+              <header>
+                <h3
+                  style={{
+                    marginBottom: rhythm(1 / 4),
+                  }}
+                >
+                  <Link style={{ boxShadow: `none` }} to={node.fields.slug}>
+                    {title}
+                  </Link>
+                </h3>
+                <small>{node.frontmatter.date}</small>
+              </header>
+              <section>
+                <p
+                  dangerouslySetInnerHTML={{
+                    __html: node.frontmatter.description || node.excerpt,
+                  }}
+                />
+              </section>
+            </article>
+          )
+        })}
+      </Layout>
+    )
+  }
+}
+
+export default BlogIndex
 
 export const pageQuery = graphql`
   query {
     site {
       siteMetadata {
-        social {
-          name
-          url
-        }
+        title
       }
     }
-    dog: file(absolutePath: { regex: "/dog.jpg/" }) {
-      childImageSharp {
-        fixed(width: 1024, height: 1024) {
-          ...GatsbyImageSharpFixed
-        }
-      }
-    }
-    allBlogPost(limit: 1, sort: { order: DESC, fields: date }) {
+    allMarkdownRemark(sort: { fields: [frontmatter___date], order: DESC }) {
       edges {
         node {
-          title
-          slug
+          excerpt
+          fields {
+            slug
+          }
+          frontmatter {
+            date(formatString: "MMMM DD, YYYY")
+            title
+            description
+          }
         }
       }
     }
   }
-`;
-
-export default IndexPage;
+`
