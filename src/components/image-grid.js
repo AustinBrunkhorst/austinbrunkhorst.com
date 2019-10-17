@@ -2,7 +2,6 @@ import React, { useMemo } from "react"
 import { useStaticQuery, graphql } from "gatsby"
 import Image from "gatsby-image"
 import styled from "styled-components"
-import useWindowSize from '@rehooks/window-size'
 import shuffle from 'shuffle-array'
 
 const ImageGrid = () => {
@@ -24,29 +23,19 @@ const ImageGrid = () => {
     }
   `)
 
-  const { innerWidth, innerHeight } = useWindowSize();
+  const { gridImages: { nodes } } = data;
 
-  const { gridImages: { nodes: gridImages } } = data;
-
-  const columns = 6;
-  const itemHeight = innerWidth / columns;
-  const rows = Math.ceil(innerHeight / itemHeight);
-  const itemCount = columns * rows;
-  const rowOverflow = (rows * itemHeight) - innerHeight;
-
-  const images = useMemo(() => shuffle(gridImages).slice(0, itemCount).map(({ name, childImageSharp: image }) =>
-    <GridImageContainer key={name} columns={columns} containerWidth={innerWidth}>
+  const images = useMemo(() => shuffle(nodes).map(({ name, childImageSharp: image }) =>
+    <GridImageContainer key={name}>
       <NoStretchImage style={{ width: "100%", height: "100%" }} {...image} />
     </GridImageContainer>
-  ), [itemCount, gridImages, columns, innerWidth]);
+  ), [nodes]);
 
   return (
-    <>
-      <GridRoot rows={rows} columns={columns} itemHeight={itemHeight} rowOverflow={rowOverflow}>
-        {images}
-        <GradientMask />
-      </GridRoot>
-    </>
+    <GridRoot>
+      {images}
+      <GradientMask />
+    </GridRoot>
   )
 }
 
@@ -54,13 +43,12 @@ const GridRoot = styled.div`
   position: absolute;
   left: 0;
   right: 0;
-  top: ${props => -props.rowOverflow / 2}px;
+  top: 0;
   height: 100%;
-  display: grid;
-  grid-template-columns: repeat(6, ${props => 100 / props.columns}%);
-  grid-template-rows: repeat(${props => props.rows}, ${props => props.itemHeight}px);
-  grid-auto-flow: row;
-  filter: grayscale(50%) opacity(0.25);
+  max-height: 450px;
+  display: flex;
+  flex-wrap: wrap;
+  filter: grayscale(60%) opacity(0.35);
   pointer-events: none;
   z-index: 0;
   overflow: hidden;
@@ -78,8 +66,10 @@ const GradientMask = styled.div`
 `;
 
 const GridImageContainer = styled.div`
-  max-height: ${props => props.containerWidth / props.columns}px;
   overflow: hidden;
+  flex: 1;
+  min-width: 200px;
+  max-height: 200px;
 `;
 
 const NoStretchImage = props => {
