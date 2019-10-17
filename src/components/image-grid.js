@@ -11,7 +11,7 @@ const ImageGrid = () => {
         nodes {
           name
           childImageSharp {
-            fluid(maxHeight: 720, quality: 100) {
+            fluid(maxHeight: 400, quality: 90) {
               ...GatsbyImageSharpFluid
               originalName
               presentationWidth
