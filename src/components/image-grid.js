@@ -48,7 +48,7 @@ const GridRoot = styled.div`
   max-height: 450px;
   display: flex;
   flex-wrap: wrap;
-  filter: grayscale(60%) opacity(0.35);
+  filter: opacity(45%) saturate(40%);
   pointer-events: none;
   z-index: 0;
   overflow: hidden;
@@ -56,7 +56,7 @@ const GridRoot = styled.div`
 
 const GradientMask = styled.div`
   position: absolute;
-  left: 0;
+  left: 0;  
   right: 0;
   top: 0;
   bottom: 0;
