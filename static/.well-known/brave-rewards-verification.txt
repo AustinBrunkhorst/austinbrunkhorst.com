@@ -1,4 +1,0 @@
-This is a Brave Rewards publisher verification file.
-
-Domain: austinbrunkhorst.com
-Token: 416448be47d9258b5ae595d8fa1a60aee06014faaab3efd3ac26430a84390125
