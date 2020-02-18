@@ -30,8 +30,9 @@ const Bio = () => {
   return (
     <div
       style={{
-        display: `flex`,
+        display: "flex",
         marginBottom: rhythm(2.5),
+        textShadow: "0 0 2px white"
       }}
     >
       <Image
@@ -41,10 +42,10 @@ const Bio = () => {
           marginRight: rhythm(1 / 2),
           marginBottom: 0,
           minWidth: 50,
-          borderRadius: `100%`,
+          borderRadius: "100%",
         }}
         imgStyle={{
-          borderRadius: `50%`,
+          borderRadius: "50%",
         }}
       />
       <div>
@@ -52,7 +53,7 @@ const Bio = () => {
           Greetings human! I'm <strong>{author}</strong>, and I like to make all the things.
         </p>
         <p>
-          Follow on <a href={`https://twitter.com/intent/follow?original_referer=${encodeURIComponent(siteUrl)}&ref_src=twsrc%5Etfw&region=follow_link&screen_name=abrunkhorst&tw_p=followbutton`}>Twitter</a> or <a href="https://github.com/AustinBrunkhorst">GitHub</a>.
+          Follow me on <a href={`https://twitter.com/intent/follow?original_referer=${encodeURIComponent(siteUrl)}&ref_src=twsrc%5Etfw&region=follow_link&screen_name=abrunkhorst&tw_p=followbutton`}>Twitter</a> or <a href="https://github.com/AustinBrunkhorst">GitHub</a>.
         </p>
       </div>
     </div>

@@ -61,14 +61,77 @@ Here's a diagram of the entire pipeline from writing the source, to building you
 
 The repository has two parts - [Parser](https://github.com/AustinBrunkhorst/CPP-Reflection/tree/master/Source/Parser) and [Runtime](https://github.com/AustinBrunkhorst/CPP-Reflection/tree/master/Source/Runtime).
 
-+ **Parser** is for the command line source parsing tool. (_requires [Boost 1.59.0](http://www.boost.org/users/history/version_1_59_0.html) and [libclang 3.7.0](http://llvm.org/releases/download.html)_)
++ **Parser** is for the command line source parsing tool. (requires [Boost 1.59.0](http://www.boost.org/users/history/version_1_59_0.html) and [libclang 3.7.0](http://llvm.org/releases/download.html))
 + **Runtime** is for the reflection runtime library.
 
 ### CMake Prebuild Example
 
 This is basic example of adding the prebuild step to an existing target in CMake.
 
-<script src="https://gist.github.com/AustinBrunkhorst/38a3ca236238604ee32ef58d2e9c6e90.js"></script>
+```cmake
+set(PROJECT_NAME "Example")
+
+# assume this contains header files for this project
+set(PROJECT_HEADER_FILES ...)
+
+# assume this contains source files for this project
+set(PROJECT_SOURCE_FILES ...)
+
+# generated file names, in the build directory
+set(META_GENERATED_HEADER "${CMAKE_CURRENT_BINARY_DIR}/Meta.Generated.h")
+set(META_GENERATED_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/Meta.Generated.cpp")
+
+# create the project target
+add_executable(${PROJECT_NAME}
+    ${PROJECT_HEADER_FILES}
+    ${PROJECT_SOURCE_FILES}
+    # make sure the generated header and source are included
+    ${META_GENERATED_HEADER}
+    ${META_GENERATED_SOURCE}
+)
+
+# path to the reflection parser executable
+set(PARSE_TOOL_EXE "ReflectionParser.exe")
+
+# input source file to pass to the reflection parser compiler
+# in this file, include any files that you want exposed to the parser
+set(PROJECT_META_HEADER "Reflection.h")
+
+# fetch all include directories for the project target
+get_property(DIRECTORIES TARGET ${PROJECT_NAME} PROPERTY INCLUDE_DIRECTORIES)
+
+# flags that will eventually be based to the reflection parser compiler
+set(META_FLAGS "")
+
+# build the include directory flags
+foreach (DIRECTORY ${DIRECTORIES})
+    set(META_FLAGS ${meta_flags} "\\\\-I${DIRECTORY}")
+endforeach ()
+
+# include the system directories
+if (MSVC)
+    # assume ${VS_VERSION} is the version of Visual Studio being used to compile
+    set(META_FLAGS ${META_FLAGS}
+        "\\\\-IC:/Program Files (x86)/Microsoft Visual Studio ${VS_VERSION}/VC/include"
+    )
+else ()
+    # you can figure it out for other compilers :)
+    message(FATAL_ERROR "System include directories not implemented for this compiler.")
+endif ()
+
+# add the command that invokes the reflection parser executable
+# whenever a header file in your project has changed
+add_custom_command(
+    OUTPUT ${META_GENERATED_HEADER} ${META_GENERATED_SOURCE}
+    DEPENDS ${PROJECT_HEADER_FILES}
+    COMMAND call "${PARSE_TOOL_EXE}"
+    --target-name "${PROJECT_NAME}"
+    --in-source "${CMAKE_CURRENT_SOURCE_DIR}/${PROJECT_SOURCE_DIR}/${PROJECT_META_HEADER}"
+    --out-header "${META_GENERATED_HEADER}"
+    --out-source "${META_GENERATED_SOURCE}"
+    --flags ${META_FLAGS}
+)
+```
 
 ### String Templates
 Generating code is usually a pretty ugly process.
@@ -90,41 +153,108 @@ Luckily for us, Clang supports the attribute `annotate( )`. You can extract the 
 
 The syntax for this attribute look something like this.
 
-
-<script src="https://gist.github.com/AustinBrunkhorst/dda9ed424e1e831173c8c09edfdac426.js"></script>
+```cpp
+__attribute__(( annotate( "Hey look at this annotation!" ) ))
+```
 
 You might be thinking, *"But it's only for Clang.. how will this work in MSVC?"*
 
 More good news! libclang preprocesses source files, so we can use preprocessor directives. In the source parsing tool, I define `__REFLECTION_PARSER__` [before compiling](https://github.com/AustinBrunkhorst/CPP-Reflection/blob/master/Source/Parser/Main.cpp#L126). We can use this to make a nice solution for all compilers.
 
-<script src="https://gist.github.com/AustinBrunkhorst/11ce4da2354f152e141a1d19fa54ca57.js"></script>
+```cpp
+#if defined(__REFLECTION_PARSER__)
+#   define Meta(...) __attribute__((annotate(#__VA_ARGS__)))
+#else
+#   define Meta(...)
+#endif
+```
 
 We would use it like so.
 
-```
+```cpp
 Meta(Mashed)
 int potatoes;
 ```
 
 Now that I could annotate code, I needed to define how I would interact with it. Initially I assumed key value pairs separated by commas, like so.
 
-```
+```cpp
 Meta(Key = Value, Key2, Key = "Yep!")
 ```
 
-But after reviewing this approach with my teammate [Jordan](http://www.jordanellis.me), he came up with the brilliant idea of doing exactly what C# does, and that is using user defined types as annotations, queryable at runtime. So I came up with this.
+But after reviewing this approach with my teammate [Jordan](https://www.linkedin.com/in/jordancellis/), he came up with the brilliant idea of doing exactly what C# does, and that is using user defined types as annotations, queryable at runtime. So I came up with this.
 
-<script src="https://gist.github.com/AustinBrunkhorst/e30ce39836692ae138a8afdaf884d220.js"></script>
+```cpp
+struct Mashed : public MetaProperty { };
+
+Meta(Mashed)
+int potatoes;
+```
 
 Here's how it works - I treat all values delimited by commas as constructors. If a value doesn't have parentheses, it's assumed to be a default constructor.
 
 For each constructor, I then extract the arguments provided. When I generate the source, I simply paste the extracted arguments as a constructor call of the provided type. The value is converted to a `Variant` and accessible at runtime. This allows us to do some really awesome things.
 
-<script src="https://gist.github.com/AustinBrunkhorst/9f40e50eebceecb040d1b53318909909.js"></script>
+```cpp
+enum class SliderType
+{
+    Horizontal,
+    Vertical
+};
+
+struct Slider : public MetaProperty
+{
+    SliderType type;
+
+    Slider(SliderType type)
+        : type(type) { }
+};
+
+struct Range : public MetaProperty
+{
+    float min, max;
+
+    Range(float min, float max)
+        : min(min)
+        , max(max) { }
+};
+
+Meta(Range(0.0f, 1.0f), Slider(SliderType::Horizontal))
+float someIntensityField;
+```
 
 One of the coolest things about this, aside from type safety, is that Visual Studio correctly syntax highlights the contents of the macro and also provides intellisense! It's a beautiful thing. Here's a more complete example of interfacing with it at runtime using the runtime library.
 
-<script src="https://gist.github.com/AustinBrunkhorst/94973cf89c572f6b007a572253a49f70.js"></script>
+```cpp
+struct SoundEffect
+{
+    Meta(Range(0.0f, 100.0f))
+    float volume;
+};
+
+int main(void)
+{
+    // you can also use type meta::Type::Get( "SoundEffect" ) based on a string name
+    Type soundEffectType = typeof( SoundEffect );
+
+    // the volume field in the SoundEffect struct
+    Field volumeField = soundEffectType.GetField( "volume" );
+
+    // meta data for the volume field
+    MetaManager &volumeMeta = volumeField.GetMeta( );
+
+    // getting the "Range" property, then casting the variant as a range
+    Range volumeRange = volumeMeta.GetProperty( typeof( Range ) ).GetValue( );
+
+    // 0.0f
+    float min = volumeRange.min;
+
+    // 100.0f
+    float max = volumeRange.max;
+
+    return 0;
+}
+```
 
 ### Function Binding
 
@@ -136,11 +266,44 @@ In libclang, you're able to easily extract signatures from functions. With this 
 
 Here's a simple demonstration of the concept.
 
-<script src="https://gist.github.com/AustinBrunkhorst/be5031e4c101c7051f10a5c05a72bbf1.js"></script>
+```cpp
+int foo(int a, float b, double c)
+{
+    return 0;
+}
+
+auto fooWrapper = [](int a, float b, double c)
+{
+    return foo(a, b, c);
+};
+
+// same behavior as foo(0, 1.0f, 2.0);
+fooWrapper(0, 1.0f, 2.0);
+```
 
 In the context of our runtime library, here's an example of something that might be generated for a class method.
 
-<script src="https://gist.github.com/AustinBrunkhorst/ee94408f4ab0368777a5e868627f13c8.js"></script>
+```cpp
+class DemoClass
+{
+public:
+    int someMethod(int a)
+    {
+        return a;
+    }
+};
+
+auto someMethodWrapper = [](Variant &obj, ArgumentList &args)
+{
+    auto &instance = obj.GetValue( );
+
+    return Variant {
+        instance.someMethod(
+            args[ 0 ].GetValue( )
+        )
+    };
+};
+```
 
 That's it! It's much less complicated than the previously mentioned approach. This concept is also applied to fields / globals with their getters and setters.
 
@@ -154,4 +317,34 @@ You shouldn't have to worry **too** much however. If like most people, you use r
 
 Here's a more complete example of dynamically calling functions with the runtime library.
 
-<script src="https://gist.github.com/AustinBrunkhorst/402f85b21539250532da613ec02bd00f.js"></script>
+```cpp
+struct SoundEffect
+{
+    float volume;
+
+    void Load(const std::string &filename);
+};
+
+int main(void)
+{
+    Type soundEffectType = typeof( SoundEffect );
+    Field volumeField = soundEffectType.GetField( "volume" );
+
+    // the runtime supports overloading, but by default returns the first overload
+    Method loadMethod = soundEffectType.GetMethod( "Load" );
+
+    // creates an instance of a sound effect
+    Variant effect = soundEffectType.Create( );
+
+    // effect.volume is now 85
+    volumeField.SetValue( effect, 85.0f );
+
+    // 85
+    volumeField.GetValue( effect );
+
+    // effect.Load is called
+    loadMethod.Invoke( effect, std::string { "Explosion.wav" } );
+
+    return 0;
+}
+```
