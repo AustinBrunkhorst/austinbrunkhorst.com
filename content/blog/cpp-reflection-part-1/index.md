@@ -61,7 +61,7 @@ Here's a diagram of the entire pipeline from writing the source, to building you
 
 The repository has two parts - [Parser](https://github.com/AustinBrunkhorst/CPP-Reflection/tree/master/Source/Parser) and [Runtime](https://github.com/AustinBrunkhorst/CPP-Reflection/tree/master/Source/Runtime).
 
-+ **Parser** is for the command line source parsing tool. (_requires [Boost 1.59.0](http://www.boost.org/users/history/version_1_59_0.html) and [libclang 3.7.0](http://llvm.org/releases/download.html)_)
++ **Parser** is for the command line source parsing tool. (requires [Boost 1.59.0](http://www.boost.org/users/history/version_1_59_0.html) and [libclang 3.7.0](http://llvm.org/releases/download.html))
 + **Runtime** is for the reflection runtime library.
 
 ### CMake Prebuild Example
