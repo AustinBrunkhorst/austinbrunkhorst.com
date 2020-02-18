@@ -1,5 +1,5 @@
 import React, { memo, useMemo } from "react"
-import { Link, graphql, useStaticQuery } from "gatsby"
+import { Link, graphql } from "gatsby"
 import styled from "styled-components"
 
 import Bio from "../components/bio"
