@@ -1,0 +1,293 @@
+<?xml version="1.0" encoding="UTF-8"?><rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:atom="http://www.w3.org/2005/Atom" version="2.0"><channel><title><![CDATA[Austin Brunkhorst]]></title><description><![CDATA[It could be anything.]]></description><link>https://austinbrunkhorst.com</link><generator>GatsbyJS</generator><lastBuildDate>Tue, 18 Feb 2020 02:04:36 GMT</lastBuildDate><item><title><![CDATA[C++ Reflection]]></title><description><![CDATA[Preface I set out this summer (2015) to implement a flexible reflection system for the game project I’m working on. This repository contains…]]></description><link>https://austinbrunkhorst.com/cpp-reflection-part-1/</link><guid isPermaLink="false">https://austinbrunkhorst.com/cpp-reflection-part-1/</guid><pubDate>Thu, 16 Jun 2016 00:00:00 GMT</pubDate><content:encoded>&lt;h2&gt;Preface&lt;/h2&gt;
+&lt;p&gt;I set out this summer (&lt;em&gt;2015&lt;/em&gt;) to implement a flexible reflection system for the game project I’m working on. This repository contains a skeleton for parts of the system that I prototyped throughout the summer. With the proper dependencies and build system setup, you should have enough to integrate into your engine / application without much fuss.&lt;/p&gt;
+&lt;h2&gt;Quick Intro&lt;/h2&gt;
+&lt;p&gt;As a statically typed language, C++ wasn’t designed to facilitate runtime type information. Instead, it’s crazy fast and optimization friendly. Games are performance critical applications - it is for this reason that C++ is basically the standard backend.&lt;/p&gt;
+&lt;p&gt;Type introspection is crucial for complex / large code bases that need to interface with tools (&lt;em&gt;i.e. a game editor&lt;/em&gt;). Unless you’re a team of all programmers (&lt;em&gt;I’m sorry if that’s the case&lt;/em&gt;) it is effectively impossible to iterate upon a larger game without some set of tools to abstract away code (&lt;em&gt;especially in 3D&lt;/em&gt;). Without type introspection, you can expect to copy and paste a lot of boilerplate code. This is &lt;strong&gt;absurdly&lt;/strong&gt; tedious and undesirable.&lt;/p&gt;
+&lt;p&gt;The good news is that there are &lt;em&gt;tons and tons&lt;/em&gt; of great resources out there for “extending” C++ to include meta information within your code base. The most common approaches you’ll find are as follows:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Using macros and templates to simplify the craziness that is writing the aforementioned boilerplate code.&lt;/li&gt;
+&lt;li&gt;Parsing your code to &lt;strong&gt;generate&lt;/strong&gt; the crazy boilerplate code.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;The latter technique isn’t adopted nearly as much as the former, but feels like it’s becoming much more common. With that said, I chose to use the generation technique. I’m pretty glad I did.&lt;/p&gt;
+&lt;p&gt;The purpose of this repository is to be a simple jumpstart reference for those interested in implementing the generation method in their own code base.&lt;/p&gt;
+&lt;p&gt;Here are a few links that cover more specifics on the concept (&lt;em&gt;specifically in the realm of C/C++&lt;/em&gt;)&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href=&quot;http://www.gdcvault.com/play/1020065/Physics-for-Game-Programmers-Debugging&quot;&gt;GDC: Physics for Game Programmers - Debugging&lt;/a&gt; (&lt;em&gt;it’s relevant, I swear!&lt;/em&gt;)&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;http://www.gdcvault.com/play/1015586/&quot;&gt;GDC: Robustification Through Introspection and Analysis Tools (Avoiding Developer Taxes)&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;http://www.myopictopics.com/?p=368&quot;&gt;Game Engine Metadata Creation with Clang&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;http://eli.thegreenplace.net/2011/07/03/parsing-c-in-python-with-clang/&quot;&gt;Parsing C++ in Python with Clang&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2&gt;Goals&lt;/h2&gt;
+&lt;h5&gt;Make the pipeline as hands off as possible.&lt;/h5&gt;
+&lt;p&gt;Specifically, you shouldn’t have to jump through a bunch of hoops just to expose your code to the reflection runtime library. Make changes to your code, recompile, and the changes are reflected immediately (&lt;em&gt;yep, it was intended&lt;/em&gt;).&lt;/p&gt;
+&lt;p&gt;No extra button clicks or steps to synchronize the reflection data.&lt;/p&gt;
+&lt;h5&gt;Provide rich functionality in the runtime library.&lt;/h5&gt;
+&lt;p&gt;If we’re going through all this trouble in the first place, might as well make it worth while!&lt;/p&gt;
+&lt;h5&gt;Avoid huge build times.&lt;/h5&gt;
+&lt;p&gt;We’re effectively compiling our code twice. First to parse our code base and understand it as intricately as a compiler does, then to &lt;em&gt;actually&lt;/em&gt; compile it as per usual (&lt;em&gt;with the addition of our generated source&lt;/em&gt;).&lt;/p&gt;
+&lt;p&gt;This is one of the downsides to the generation approach. Instead of manually writing these macros inline with our source, we’re using the brains of a compiler. However, we would much rather sacrifice a little bit shorter build times for the luxury of cleaner, less cluttered code.&lt;/p&gt;
+&lt;p&gt;Unfortunately, this also implies creating a much less intuitive build pipeline. Don’t worry though! I have some nifty diagrams for you.&lt;/p&gt;
+&lt;h2&gt;Pipeline&lt;/h2&gt;
+&lt;p&gt;In our engine (&lt;em&gt;we call it &lt;strong&gt;Ursine Engine&lt;/strong&gt;, because we’re dangerously clever and played on the fact that our team name is Bear King&lt;/em&gt;), we use &lt;a href=&quot;http://www.cmake.org/&quot;&gt;CMake&lt;/a&gt; for managing most aspects of the overall build pipeline. CMake is a horribly wonderful tool that I’ve come to love despite hating it at the same time. It allows us to generate solutions for most IDEs that anyone on the team likes to use, although currently, everyone is using Visual Studio 2015 (&lt;em&gt;finally &lt;strong&gt;some&lt;/strong&gt; C++14, baby!&lt;/em&gt;).&lt;/p&gt;
+&lt;p&gt;CMake makes this pipeline surprisingly simple which was a relief. I won’t go into much specific detail, but I’ll provide relevant snippets of the integration into our engine a little later when I describe the code in this repository.&lt;/p&gt;
+&lt;p&gt;Here’s a diagram of the entire pipeline from writing the source, to building your game / application.&lt;/p&gt;
+&lt;p&gt;&lt;span
+      class=&quot;gatsby-resp-image-wrapper&quot;
+      style=&quot;position: relative; display: block; margin-left: auto; margin-right: auto;  max-width: 590px;&quot;
+    &gt;
+      &lt;a
+    class=&quot;gatsby-resp-image-link&quot;
+    href=&quot;/static/4f956dbf0b428167727711f19d32ff23/cecac/diagram.png&quot;
+    style=&quot;display: block&quot;
+    target=&quot;_blank&quot;
+    rel=&quot;noopener&quot;
+  &gt;
+    &lt;span
+    class=&quot;gatsby-resp-image-background-image&quot;
+    style=&quot;padding-bottom: 406.45604395604397%; position: relative; bottom: 0; left: 0; background-image: url(&apos;data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAABRCAYAAADSHIbSAAAACXBIWXMAAA7DAAAOwwHHb6hkAAAFdUlEQVRYw71YyY7jOAzN//9aAXXqPsyhMOilqrPHjjctdjR8tKjIjuyoqoExQMh2rJfHRSSljfPX7XbjURvr9sfS7Q4Fy3YPuXgpwvvyWjvVdU4pRaNyfd8zxmYO2LTK/dldxokEcjiV7kB/cKRxfywC8P54cdW1dE3TsGit3TAMj4Btp92f/Qj4sT27128/3Ld/frvX7z/cv7/2zB6gp/OV2HUMJGC4VgEx8ef70f36OPH4sTuH9+dL5ay1o5CZVlTWPEFsBUZ3VUcB83NR85xYFhliAuzIk4kVGBdl4zr6rVOa7yEyL0gKECNAL2XNLKqGvEggS1c8b6Jy/GP8DNtorUgMGx4eLYrSlWXJv8Vgbomh3AtAXdcscMDb25t7eXlxr6+vrm3bZcAlUAF+prJcmzWbYBV0tBqgHtjgPqVmDLoIiInH43Ei+/2eQb8MeDqdGOj99zuD4T4GTF2rgIfDgQVgGHe7XZJhtg1lncJ+8zX7lOF8CWEiWELgHLmfAy56ef4BJkI9SFM3PIIpYjFb5XnsySRRlZ9plPsshvhYEQDUs6IyPXOawjP9ro1xJmK6CigA/M7L/B7AAP00IGzGQU3xeKCxoBWDr8DOfAWQLOUGn+du/DxeANSiRZYNESYIGy9iyz6yoc2xYfCc96SI9k6S56VQSzIUtaXocK0mwHnAZ4cNPjY+RMrr1V2KgjJ0MY7kFEXqQu3YKasMwQD2wVg3VFOqylV15cea/6z336wCzll2VEO0Jbb9wPcG9yTK2DtYnlPG0Q4k/cCCfkfubVh2Cwl2XkdEQldAIr2LPMcZJ8lw/hITjI+5K9uuYQdpcchKxtnErCRcwILbNAgxk3yI9ybBMJaJyggFCV5MHrOKca2mPtBSCrvBhv2E1aLK1q9P3A8+zrQdVWw0lVCjyAwImXQZxZ8FhpKOWsrKuO9EXaMZsDWdB++ZsdLjWgfrStXhj7jhjD3a+aQgNgQIVOzMqDLuMRl/NI7K1aoJv4HlZt4Yha5Be4b00bWr2I7CsKXOFQAAK9or/2YHe2cooSI5LtjVq4LJfSTzCjnx8p2RZhsqX387dWcoNrQe/GmzJE6R4iS1WJzS6Ia9DMZ25uVkHEqoyKK/pzHDJYDZ+ZUDw2fV5WGW4yKdnvaED0sPzGpKAMh3UoOXVFpqSgOgZGhuNUhgy2EhvedcD8lB1PwK2IMN41p7+yLLYMM2UnnJhjl/sJE811DbgcysopI592yOYyY2NJ7dXIJtM0Jns8QgLvZYNdITrvWGDwxjB3E8EiB2UKgnEHkHTRY7h6UtGTvHd2IdpSskC+ko1triTcrw9/w4hNYkbuLX7LhZ8iQ3SS1l5Io2jm3HRd5Y+9DGZe/14stGNnv2bbK3kcxjfMjAfhJCJgr87IZTOgQkCbRwELRzAJaWOLUrXWfoPQpGXAHJ28HLK45J9of3frr3RwS+Jb4Nk4YpFXLJDrZuKlLxQuWyYXbjGlcsiMmmbXhMlYPkXs9QcUL3qq326o9dw7iubWicspr2YbaXYyeg1qRywc09Xylhr0wgvBOltIb+GjUHquq45iRAk2EjaxmAdT0CoYABVDaOWStluo77oHrcN8434V9eeguHNvlLj/tFsh/UvPo9Su1LBCeIW2b6mgDCKf4Es5aTzNy1nGNDeb9aAnJsaBLpK5th/CE2jefzmU+YLpfLw8nSpxhCRTmq2m634YQpdcT3/wHOV0vh98oiUF/5JPtphpPAjjrb7M7hITkoHY7mEX9QVfZ/awdqi4A47JYTOXiWSwASg4/Jv4tDa/5e5dA0+d1B77decf7LYjgJHQLAxmd/PdJepRtPmZ40nptnp+cArHiDaMIW9rbSg/8HtDr7H+hy7ZMAAAAASUVORK5CYII=&apos;); background-size: cover; display: block;&quot;
+  &gt;&lt;/span&gt;
+  &lt;img
+        class=&quot;gatsby-resp-image-image&quot;
+        alt=&quot;Pipeline Diagram&quot;
+        title=&quot;Pipeline Diagram&quot;
+        src=&quot;/static/4f956dbf0b428167727711f19d32ff23/fcda8/diagram.png&quot;
+        srcset=&quot;/static/4f956dbf0b428167727711f19d32ff23/12f09/diagram.png 148w,
+/static/4f956dbf0b428167727711f19d32ff23/e4a3f/diagram.png 295w,
+/static/4f956dbf0b428167727711f19d32ff23/fcda8/diagram.png 590w,
+/static/4f956dbf0b428167727711f19d32ff23/cecac/diagram.png 728w&quot;
+        sizes=&quot;(max-width: 590px) 100vw, 590px&quot;
+        style=&quot;width:100%;height:100%;margin:0;vertical-align:middle;position:absolute;top:0;left:0;&quot;
+        loading=&quot;lazy&quot;
+      /&gt;
+  &lt;/a&gt;
+    &lt;/span&gt;&lt;/p&gt;
+&lt;h2&gt;Code&lt;/h2&gt;
+&lt;p&gt;The repository has two parts - &lt;a href=&quot;https://github.com/AustinBrunkhorst/CPP-Reflection/tree/master/Source/Parser&quot;&gt;Parser&lt;/a&gt; and &lt;a href=&quot;https://github.com/AustinBrunkhorst/CPP-Reflection/tree/master/Source/Runtime&quot;&gt;Runtime&lt;/a&gt;.&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;Parser&lt;/strong&gt; is for the command line source parsing tool. (requires &lt;a href=&quot;http://www.boost.org/users/history/version_1_59_0.html&quot;&gt;Boost 1.59.0&lt;/a&gt; and &lt;a href=&quot;http://llvm.org/releases/download.html&quot;&gt;libclang 3.7.0&lt;/a&gt;)&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Runtime&lt;/strong&gt; is for the reflection runtime library.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;CMake Prebuild Example&lt;/h3&gt;
+&lt;p&gt;This is basic example of adding the prebuild step to an existing target in CMake.&lt;/p&gt;
+&lt;div class=&quot;gatsby-highlight&quot; data-language=&quot;cmake&quot;&gt;&lt;pre class=&quot;language-cmake&quot;&gt;&lt;code class=&quot;language-cmake&quot;&gt;&lt;span class=&quot;token keyword&quot;&gt;set&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;token variable&quot;&gt;PROJECT_NAME&lt;/span&gt; &lt;span class=&quot;token string&quot;&gt;&quot;Example&quot;&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+
+&lt;span class=&quot;token comment&quot;&gt;# assume this contains header files for this project&lt;/span&gt;
+&lt;span class=&quot;token keyword&quot;&gt;set&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;PROJECT_HEADER_FILES ...&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+
+&lt;span class=&quot;token comment&quot;&gt;# assume this contains source files for this project&lt;/span&gt;
+&lt;span class=&quot;token keyword&quot;&gt;set&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;PROJECT_SOURCE_FILES ...&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+
+&lt;span class=&quot;token comment&quot;&gt;# generated file names, in the build directory&lt;/span&gt;
+&lt;span class=&quot;token keyword&quot;&gt;set&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;META_GENERATED_HEADER &lt;span class=&quot;token string&quot;&gt;&quot;&lt;span class=&quot;token interpolation&quot;&gt;&lt;span class=&quot;token punctuation&quot;&gt;${&lt;/span&gt;&lt;span class=&quot;token variable&quot;&gt;CMAKE_CURRENT_BINARY_DIR&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;&lt;/span&gt;/Meta.Generated.h&quot;&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;token keyword&quot;&gt;set&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;META_GENERATED_SOURCE &lt;span class=&quot;token string&quot;&gt;&quot;&lt;span class=&quot;token interpolation&quot;&gt;&lt;span class=&quot;token punctuation&quot;&gt;${&lt;/span&gt;&lt;span class=&quot;token variable&quot;&gt;CMAKE_CURRENT_BINARY_DIR&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;&lt;/span&gt;/Meta.Generated.cpp&quot;&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+
+&lt;span class=&quot;token comment&quot;&gt;# create the project target&lt;/span&gt;
+&lt;span class=&quot;token keyword&quot;&gt;add_executable&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;${&lt;/span&gt;&lt;span class=&quot;token variable&quot;&gt;PROJECT_NAME&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;
+    &lt;span class=&quot;token punctuation&quot;&gt;${&lt;/span&gt;PROJECT_HEADER_FILES&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;
+    &lt;span class=&quot;token punctuation&quot;&gt;${&lt;/span&gt;PROJECT_SOURCE_FILES&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;
+    &lt;span class=&quot;token comment&quot;&gt;# make sure the generated header and source are included&lt;/span&gt;
+    &lt;span class=&quot;token punctuation&quot;&gt;${&lt;/span&gt;META_GENERATED_HEADER&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;
+    &lt;span class=&quot;token punctuation&quot;&gt;${&lt;/span&gt;META_GENERATED_SOURCE&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+
+&lt;span class=&quot;token comment&quot;&gt;# path to the reflection parser executable&lt;/span&gt;
+&lt;span class=&quot;token keyword&quot;&gt;set&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;PARSE_TOOL_EXE &lt;span class=&quot;token string&quot;&gt;&quot;ReflectionParser.exe&quot;&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+
+&lt;span class=&quot;token comment&quot;&gt;# input source file to pass to the reflection parser compiler&lt;/span&gt;
+&lt;span class=&quot;token comment&quot;&gt;# in this file, include any files that you want exposed to the parser&lt;/span&gt;
+&lt;span class=&quot;token keyword&quot;&gt;set&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;PROJECT_META_HEADER &lt;span class=&quot;token string&quot;&gt;&quot;Reflection.h&quot;&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+
+&lt;span class=&quot;token comment&quot;&gt;# fetch all include directories for the project target&lt;/span&gt;
+&lt;span class=&quot;token keyword&quot;&gt;get_property&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;DIRECTORIES TARGET &lt;span class=&quot;token punctuation&quot;&gt;${&lt;/span&gt;&lt;span class=&quot;token variable&quot;&gt;PROJECT_NAME&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt; PROPERTY &lt;span class=&quot;token property&quot;&gt;INCLUDE_DIRECTORIES&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+
+&lt;span class=&quot;token comment&quot;&gt;# flags that will eventually be based to the reflection parser compiler&lt;/span&gt;
+&lt;span class=&quot;token keyword&quot;&gt;set&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;META_FLAGS &lt;span class=&quot;token string&quot;&gt;&quot;&quot;&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+
+&lt;span class=&quot;token comment&quot;&gt;# build the include directory flags&lt;/span&gt;
+&lt;span class=&quot;token keyword&quot;&gt;foreach&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;DIRECTORY &lt;span class=&quot;token punctuation&quot;&gt;${&lt;/span&gt;DIRECTORIES&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;token keyword&quot;&gt;set&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;META_FLAGS &lt;span class=&quot;token punctuation&quot;&gt;${&lt;/span&gt;meta_flags&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt; &lt;span class=&quot;token string&quot;&gt;&quot;\\\\-I&lt;span class=&quot;token interpolation&quot;&gt;&lt;span class=&quot;token punctuation&quot;&gt;${&lt;/span&gt;&lt;span class=&quot;token variable&quot;&gt;DIRECTORY&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;&lt;/span&gt;&quot;&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;token keyword&quot;&gt;endforeach&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+
+&lt;span class=&quot;token comment&quot;&gt;# include the system directories&lt;/span&gt;
+&lt;span class=&quot;token keyword&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;token variable&quot;&gt;MSVC&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;token comment&quot;&gt;# assume ${VS_VERSION} is the version of Visual Studio being used to compile&lt;/span&gt;
+    &lt;span class=&quot;token keyword&quot;&gt;set&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;META_FLAGS &lt;span class=&quot;token punctuation&quot;&gt;${&lt;/span&gt;META_FLAGS&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;
+        &lt;span class=&quot;token string&quot;&gt;&quot;\\\\-IC:/Program Files (x86)/Microsoft Visual Studio &lt;span class=&quot;token interpolation&quot;&gt;&lt;span class=&quot;token punctuation&quot;&gt;${&lt;/span&gt;&lt;span class=&quot;token variable&quot;&gt;VS_VERSION&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;&lt;/span&gt;/VC/include&quot;&lt;/span&gt;
+    &lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;token keyword&quot;&gt;else&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;token comment&quot;&gt;# you can figure it out for other compilers :)&lt;/span&gt;
+    &lt;span class=&quot;token keyword&quot;&gt;message&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;FATAL_ERROR &lt;span class=&quot;token string&quot;&gt;&quot;System include directories not implemented for this compiler.&quot;&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;token keyword&quot;&gt;endif&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+
+&lt;span class=&quot;token comment&quot;&gt;# add the command that invokes the reflection parser executable&lt;/span&gt;
+&lt;span class=&quot;token comment&quot;&gt;# whenever a header file in your project has changed&lt;/span&gt;
+&lt;span class=&quot;token keyword&quot;&gt;add_custom_command&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;
+    OUTPUT &lt;span class=&quot;token punctuation&quot;&gt;${&lt;/span&gt;META_GENERATED_HEADER&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;${&lt;/span&gt;META_GENERATED_SOURCE&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;
+    &lt;span class=&quot;token property&quot;&gt;DEPENDS&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;${&lt;/span&gt;PROJECT_HEADER_FILES&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;
+    COMMAND call &lt;span class=&quot;token string&quot;&gt;&quot;&lt;span class=&quot;token interpolation&quot;&gt;&lt;span class=&quot;token punctuation&quot;&gt;${&lt;/span&gt;&lt;span class=&quot;token variable&quot;&gt;PARSE_TOOL_EXE&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;&lt;/span&gt;&quot;&lt;/span&gt;
+    --target-name &lt;span class=&quot;token string&quot;&gt;&quot;&lt;span class=&quot;token interpolation&quot;&gt;&lt;span class=&quot;token punctuation&quot;&gt;${&lt;/span&gt;&lt;span class=&quot;token variable&quot;&gt;PROJECT_NAME&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;&lt;/span&gt;&quot;&lt;/span&gt;
+    --in-source &lt;span class=&quot;token string&quot;&gt;&quot;&lt;span class=&quot;token interpolation&quot;&gt;&lt;span class=&quot;token punctuation&quot;&gt;${&lt;/span&gt;&lt;span class=&quot;token variable&quot;&gt;CMAKE_CURRENT_SOURCE_DIR&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;&lt;/span&gt;/&lt;span class=&quot;token interpolation&quot;&gt;&lt;span class=&quot;token punctuation&quot;&gt;${&lt;/span&gt;&lt;span class=&quot;token variable&quot;&gt;PROJECT_SOURCE_DIR&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;&lt;/span&gt;/&lt;span class=&quot;token interpolation&quot;&gt;&lt;span class=&quot;token punctuation&quot;&gt;${&lt;/span&gt;&lt;span class=&quot;token variable&quot;&gt;PROJECT_META_HEADER&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;&lt;/span&gt;&quot;&lt;/span&gt;
+    --out-header &lt;span class=&quot;token string&quot;&gt;&quot;&lt;span class=&quot;token interpolation&quot;&gt;&lt;span class=&quot;token punctuation&quot;&gt;${&lt;/span&gt;&lt;span class=&quot;token variable&quot;&gt;META_GENERATED_HEADER&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;&lt;/span&gt;&quot;&lt;/span&gt;
+    --out-source &lt;span class=&quot;token string&quot;&gt;&quot;&lt;span class=&quot;token interpolation&quot;&gt;&lt;span class=&quot;token punctuation&quot;&gt;${&lt;/span&gt;&lt;span class=&quot;token variable&quot;&gt;META_GENERATED_SOURCE&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;&lt;/span&gt;&quot;&lt;/span&gt;
+    --flags &lt;span class=&quot;token punctuation&quot;&gt;${&lt;/span&gt;META_FLAGS&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h3&gt;String Templates&lt;/h3&gt;
+&lt;p&gt;Generating code is usually a pretty ugly process.&lt;/p&gt;
+&lt;p&gt;Instead of writing the characters manually (i.e. &lt;code class=&quot;language-text&quot;&gt;output += &amp;quot;REGISTER_FUNCTION(&amp;quot; + name + &amp;quot;)&amp;quot;&lt;/code&gt; ), I wanted to use &lt;em&gt;“String Templates”&lt;/em&gt;. That is why I chose &lt;a href=&quot;https://mustache.github.io/&quot;&gt;Mustache&lt;/a&gt;. I found a simple &lt;a href=&quot;https://github.com/kainjow/Mustache&quot;&gt;header only implemenation&lt;/a&gt;, which is included in the &lt;a href=&quot;https://github.com/AustinBrunkhorst/CPP-Reflection/blob/master/Source/Parser/Mustache.h&quot;&gt;Parser&lt;/a&gt; section.&lt;/p&gt;
+&lt;p&gt;In the &lt;strong&gt;Generate Source Files&lt;/strong&gt; section of the pipeline diagram, you’ll notice two steps. &lt;em&gt;“Compile”&lt;/em&gt; and &lt;em&gt;“Render”&lt;/em&gt;. Compile simply takes all of the types that we’ve extracted and &lt;a href=&quot;https://github.com/AustinBrunkhorst/CPP-Reflection/blob/master/Source/Parser/ReflectionParser.cpp#L217-L220&quot;&gt;compiles the data to be referenced in Mustache&lt;/a&gt;. Render actually renders the templates and writes them to the configured output files.&lt;/p&gt;
+&lt;p&gt;In the &lt;a href=&quot;https://github.com/AustinBrunkhorst/CPP-Reflection/tree/master/Templates&quot;&gt;Templates&lt;/a&gt; folder of the repository, you’ll find the mustache template files referenced in the reflection parser.&lt;/p&gt;
+&lt;h3&gt;Type Meta Data&lt;/h3&gt;
+&lt;p&gt;One of the biggest features that I wanted to implement in the runtime library is being able to add meta data to types at compile time.&lt;/p&gt;
+&lt;p&gt;If you’ve ever used C#, you know they have a pretty groovy reflection system built into the language. I really like their syntax for &lt;a href=&quot;http://www.tutorialspoint.com/csharp/csharp_attributes.htm&quot;&gt;Attributes&lt;/a&gt;, which is a way to add meta data to language types / constructs.&lt;/p&gt;
+&lt;p&gt;The closest I could get to this style, was with the use of Macros. C++11 introduced &lt;a href=&quot;http://en.cppreference.com/w/cpp/language/attributes&quot;&gt;Attribute Specifiers&lt;/a&gt; as a way to hint compilers on intended behavior or add language extensions. Unfortunately, compiler support varies widely, and as mentioned it’s only managed at compile time.&lt;/p&gt;
+&lt;p&gt;Luckily for us, Clang supports the attribute &lt;code class=&quot;language-text&quot;&gt;annotate( )&lt;/code&gt;. You can extract the contents of an annotation with &lt;a href=&quot;https://github.com/AustinBrunkhorst/CPP-Reflection/blob/master/Source/Parser/MetaDataManager.cpp#L10-L17&quot;&gt;libclang&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;The syntax for this attribute look something like this.&lt;/p&gt;
+&lt;div class=&quot;gatsby-highlight&quot; data-language=&quot;cpp&quot;&gt;&lt;pre class=&quot;language-cpp&quot;&gt;&lt;code class=&quot;language-cpp&quot;&gt;&lt;span class=&quot;token function&quot;&gt;__attribute__&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt; &lt;span class=&quot;token function&quot;&gt;annotate&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt; &lt;span class=&quot;token string&quot;&gt;&quot;Hey look at this annotation!&quot;&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;You might be thinking, &lt;em&gt;“But it’s only for Clang.. how will this work in MSVC?”&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;More good news! libclang preprocesses source files, so we can use preprocessor directives. In the source parsing tool, I define &lt;code class=&quot;language-text&quot;&gt;__REFLECTION_PARSER__&lt;/code&gt; &lt;a href=&quot;https://github.com/AustinBrunkhorst/CPP-Reflection/blob/master/Source/Parser/Main.cpp#L126&quot;&gt;before compiling&lt;/a&gt;. We can use this to make a nice solution for all compilers.&lt;/p&gt;
+&lt;div class=&quot;gatsby-highlight&quot; data-language=&quot;cpp&quot;&gt;&lt;pre class=&quot;language-cpp&quot;&gt;&lt;code class=&quot;language-cpp&quot;&gt;&lt;span class=&quot;token macro property&quot;&gt;#&lt;span class=&quot;token directive keyword&quot;&gt;if&lt;/span&gt; defined(__REFLECTION_PARSER__)&lt;/span&gt;
+&lt;span class=&quot;token macro property&quot;&gt;#   &lt;span class=&quot;token directive keyword&quot;&gt;define&lt;/span&gt; Meta(...) __attribute__((annotate(#__VA_ARGS__)))&lt;/span&gt;
+&lt;span class=&quot;token macro property&quot;&gt;#&lt;span class=&quot;token directive keyword&quot;&gt;else&lt;/span&gt;&lt;/span&gt;
+&lt;span class=&quot;token macro property&quot;&gt;#   &lt;span class=&quot;token directive keyword&quot;&gt;define&lt;/span&gt; Meta(...)&lt;/span&gt;
+&lt;span class=&quot;token macro property&quot;&gt;#&lt;span class=&quot;token directive keyword&quot;&gt;endif&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;We would use it like so.&lt;/p&gt;
+&lt;div class=&quot;gatsby-highlight&quot; data-language=&quot;cpp&quot;&gt;&lt;pre class=&quot;language-cpp&quot;&gt;&lt;code class=&quot;language-cpp&quot;&gt;&lt;span class=&quot;token function&quot;&gt;Meta&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;Mashed&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;token keyword&quot;&gt;int&lt;/span&gt; potatoes&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Now that I could annotate code, I needed to define how I would interact with it. Initially I assumed key value pairs separated by commas, like so.&lt;/p&gt;
+&lt;div class=&quot;gatsby-highlight&quot; data-language=&quot;cpp&quot;&gt;&lt;pre class=&quot;language-cpp&quot;&gt;&lt;code class=&quot;language-cpp&quot;&gt;&lt;span class=&quot;token function&quot;&gt;Meta&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;Key &lt;span class=&quot;token operator&quot;&gt;=&lt;/span&gt; Value&lt;span class=&quot;token punctuation&quot;&gt;,&lt;/span&gt; Key2&lt;span class=&quot;token punctuation&quot;&gt;,&lt;/span&gt; Key &lt;span class=&quot;token operator&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;token string&quot;&gt;&quot;Yep!&quot;&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;But after reviewing this approach with my teammate &lt;a href=&quot;https://www.linkedin.com/in/jordancellis/&quot;&gt;Jordan&lt;/a&gt;, he came up with the brilliant idea of doing exactly what C# does, and that is using user defined types as annotations, queryable at runtime. So I came up with this.&lt;/p&gt;
+&lt;div class=&quot;gatsby-highlight&quot; data-language=&quot;cpp&quot;&gt;&lt;pre class=&quot;language-cpp&quot;&gt;&lt;code class=&quot;language-cpp&quot;&gt;&lt;span class=&quot;token keyword&quot;&gt;struct&lt;/span&gt; &lt;span class=&quot;token class-name&quot;&gt;Mashed&lt;/span&gt; &lt;span class=&quot;token operator&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;token keyword&quot;&gt;public&lt;/span&gt; MetaProperty &lt;span class=&quot;token punctuation&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+
+&lt;span class=&quot;token function&quot;&gt;Meta&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;Mashed&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;token keyword&quot;&gt;int&lt;/span&gt; potatoes&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Here’s how it works - I treat all values delimited by commas as constructors. If a value doesn’t have parentheses, it’s assumed to be a default constructor.&lt;/p&gt;
+&lt;p&gt;For each constructor, I then extract the arguments provided. When I generate the source, I simply paste the extracted arguments as a constructor call of the provided type. The value is converted to a &lt;code class=&quot;language-text&quot;&gt;Variant&lt;/code&gt; and accessible at runtime. This allows us to do some really awesome things.&lt;/p&gt;
+&lt;div class=&quot;gatsby-highlight&quot; data-language=&quot;cpp&quot;&gt;&lt;pre class=&quot;language-cpp&quot;&gt;&lt;code class=&quot;language-cpp&quot;&gt;&lt;span class=&quot;token keyword&quot;&gt;enum&lt;/span&gt; &lt;span class=&quot;token class-name&quot;&gt;class&lt;/span&gt; SliderType
+&lt;span class=&quot;token punctuation&quot;&gt;{&lt;/span&gt;
+    Horizontal&lt;span class=&quot;token punctuation&quot;&gt;,&lt;/span&gt;
+    Vertical
+&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+
+&lt;span class=&quot;token keyword&quot;&gt;struct&lt;/span&gt; &lt;span class=&quot;token class-name&quot;&gt;Slider&lt;/span&gt; &lt;span class=&quot;token operator&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;token keyword&quot;&gt;public&lt;/span&gt; MetaProperty
+&lt;span class=&quot;token punctuation&quot;&gt;{&lt;/span&gt;
+    SliderType type&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+
+    &lt;span class=&quot;token function&quot;&gt;Slider&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;SliderType type&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+        &lt;span class=&quot;token operator&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;token function&quot;&gt;type&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;type&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+
+&lt;span class=&quot;token keyword&quot;&gt;struct&lt;/span&gt; &lt;span class=&quot;token class-name&quot;&gt;Range&lt;/span&gt; &lt;span class=&quot;token operator&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;token keyword&quot;&gt;public&lt;/span&gt; MetaProperty
+&lt;span class=&quot;token punctuation&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;token keyword&quot;&gt;float&lt;/span&gt; min&lt;span class=&quot;token punctuation&quot;&gt;,&lt;/span&gt; max&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+
+    &lt;span class=&quot;token function&quot;&gt;Range&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;token keyword&quot;&gt;float&lt;/span&gt; min&lt;span class=&quot;token punctuation&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;token keyword&quot;&gt;float&lt;/span&gt; max&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+        &lt;span class=&quot;token operator&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;token function&quot;&gt;min&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;min&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+        &lt;span class=&quot;token punctuation&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;token function&quot;&gt;max&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;max&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+
+&lt;span class=&quot;token function&quot;&gt;Meta&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;token function&quot;&gt;Range&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;token number&quot;&gt;0.0f&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;token number&quot;&gt;1.0f&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;token function&quot;&gt;Slider&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;SliderType&lt;span class=&quot;token operator&quot;&gt;::&lt;/span&gt;Horizontal&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;token keyword&quot;&gt;float&lt;/span&gt; someIntensityField&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;One of the coolest things about this, aside from type safety, is that Visual Studio correctly syntax highlights the contents of the macro and also provides intellisense! It’s a beautiful thing. Here’s a more complete example of interfacing with it at runtime using the runtime library.&lt;/p&gt;
+&lt;div class=&quot;gatsby-highlight&quot; data-language=&quot;cpp&quot;&gt;&lt;pre class=&quot;language-cpp&quot;&gt;&lt;code class=&quot;language-cpp&quot;&gt;&lt;span class=&quot;token keyword&quot;&gt;struct&lt;/span&gt; &lt;span class=&quot;token class-name&quot;&gt;SoundEffect&lt;/span&gt;
+&lt;span class=&quot;token punctuation&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;token function&quot;&gt;Meta&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;token function&quot;&gt;Range&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;token number&quot;&gt;0.0f&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;token number&quot;&gt;100.0f&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;token keyword&quot;&gt;float&lt;/span&gt; volume&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+
+&lt;span class=&quot;token keyword&quot;&gt;int&lt;/span&gt; &lt;span class=&quot;token function&quot;&gt;main&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;token keyword&quot;&gt;void&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;token punctuation&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;token comment&quot;&gt;// you can also use type meta::Type::Get( &quot;SoundEffect&quot; ) based on a string name&lt;/span&gt;
+    Type soundEffectType &lt;span class=&quot;token operator&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;token function&quot;&gt;typeof&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt; SoundEffect &lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+
+    &lt;span class=&quot;token comment&quot;&gt;// the volume field in the SoundEffect struct&lt;/span&gt;
+    Field volumeField &lt;span class=&quot;token operator&quot;&gt;=&lt;/span&gt; soundEffectType&lt;span class=&quot;token punctuation&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;token function&quot;&gt;GetField&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt; &lt;span class=&quot;token string&quot;&gt;&quot;volume&quot;&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+
+    &lt;span class=&quot;token comment&quot;&gt;// meta data for the volume field&lt;/span&gt;
+    MetaManager &lt;span class=&quot;token operator&quot;&gt;&amp;amp;&lt;/span&gt;volumeMeta &lt;span class=&quot;token operator&quot;&gt;=&lt;/span&gt; volumeField&lt;span class=&quot;token punctuation&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;token function&quot;&gt;GetMeta&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+
+    &lt;span class=&quot;token comment&quot;&gt;// getting the &quot;Range&quot; property, then casting the variant as a range&lt;/span&gt;
+    Range volumeRange &lt;span class=&quot;token operator&quot;&gt;=&lt;/span&gt; volumeMeta&lt;span class=&quot;token punctuation&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;token function&quot;&gt;GetProperty&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt; &lt;span class=&quot;token function&quot;&gt;typeof&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt; Range &lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;token function&quot;&gt;GetValue&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+
+    &lt;span class=&quot;token comment&quot;&gt;// 0.0f&lt;/span&gt;
+    &lt;span class=&quot;token keyword&quot;&gt;float&lt;/span&gt; min &lt;span class=&quot;token operator&quot;&gt;=&lt;/span&gt; volumeRange&lt;span class=&quot;token punctuation&quot;&gt;.&lt;/span&gt;min&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+
+    &lt;span class=&quot;token comment&quot;&gt;// 100.0f&lt;/span&gt;
+    &lt;span class=&quot;token keyword&quot;&gt;float&lt;/span&gt; max &lt;span class=&quot;token operator&quot;&gt;=&lt;/span&gt; volumeRange&lt;span class=&quot;token punctuation&quot;&gt;.&lt;/span&gt;max&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+
+    &lt;span class=&quot;token keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;token number&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h3&gt;Function Binding&lt;/h3&gt;
+&lt;p&gt;Another notoriously difficult or convoluted process in managing reflection info in C++ is dynamically invoking functions / methods.&lt;/p&gt;
+&lt;p&gt;The most common approach is to store raw function / method pointers and calculate the offsets of arguments. The result is a ton of templates and difficult to follow operations. Not to mention, I can’t imagine it’s fun to debug!&lt;/p&gt;
+&lt;p&gt;In libclang, you’re able to easily extract signatures from functions. With this in mind, I came up with the most simple approach that I could think of. &lt;strong&gt;Wrapping function calls in generated lambdas&lt;/strong&gt;.&lt;/p&gt;
+&lt;p&gt;Here’s a simple demonstration of the concept.&lt;/p&gt;
+&lt;div class=&quot;gatsby-highlight&quot; data-language=&quot;cpp&quot;&gt;&lt;pre class=&quot;language-cpp&quot;&gt;&lt;code class=&quot;language-cpp&quot;&gt;&lt;span class=&quot;token keyword&quot;&gt;int&lt;/span&gt; &lt;span class=&quot;token function&quot;&gt;foo&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;token keyword&quot;&gt;int&lt;/span&gt; a&lt;span class=&quot;token punctuation&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;token keyword&quot;&gt;float&lt;/span&gt; b&lt;span class=&quot;token punctuation&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;token keyword&quot;&gt;double&lt;/span&gt; c&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;token punctuation&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;token keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;token number&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;
+
+&lt;span class=&quot;token keyword&quot;&gt;auto&lt;/span&gt; fooWrapper &lt;span class=&quot;token operator&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;]&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;token keyword&quot;&gt;int&lt;/span&gt; a&lt;span class=&quot;token punctuation&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;token keyword&quot;&gt;float&lt;/span&gt; b&lt;span class=&quot;token punctuation&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;token keyword&quot;&gt;double&lt;/span&gt; c&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;token punctuation&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;token keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;token function&quot;&gt;foo&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;a&lt;span class=&quot;token punctuation&quot;&gt;,&lt;/span&gt; b&lt;span class=&quot;token punctuation&quot;&gt;,&lt;/span&gt; c&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+
+&lt;span class=&quot;token comment&quot;&gt;// same behavior as foo(0, 1.0f, 2.0);&lt;/span&gt;
+&lt;span class=&quot;token function&quot;&gt;fooWrapper&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;token number&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;token number&quot;&gt;1.0f&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;token number&quot;&gt;2.0&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;In the context of our runtime library, here’s an example of something that might be generated for a class method.&lt;/p&gt;
+&lt;div class=&quot;gatsby-highlight&quot; data-language=&quot;cpp&quot;&gt;&lt;pre class=&quot;language-cpp&quot;&gt;&lt;code class=&quot;language-cpp&quot;&gt;&lt;span class=&quot;token keyword&quot;&gt;class&lt;/span&gt; &lt;span class=&quot;token class-name&quot;&gt;DemoClass&lt;/span&gt;
+&lt;span class=&quot;token punctuation&quot;&gt;{&lt;/span&gt;
+&lt;span class=&quot;token keyword&quot;&gt;public&lt;/span&gt;&lt;span class=&quot;token operator&quot;&gt;:&lt;/span&gt;
+    &lt;span class=&quot;token keyword&quot;&gt;int&lt;/span&gt; &lt;span class=&quot;token function&quot;&gt;someMethod&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;token keyword&quot;&gt;int&lt;/span&gt; a&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;token punctuation&quot;&gt;{&lt;/span&gt;
+        &lt;span class=&quot;token keyword&quot;&gt;return&lt;/span&gt; a&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+
+&lt;span class=&quot;token keyword&quot;&gt;auto&lt;/span&gt; someMethodWrapper &lt;span class=&quot;token operator&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;]&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;Variant &lt;span class=&quot;token operator&quot;&gt;&amp;amp;&lt;/span&gt;obj&lt;span class=&quot;token punctuation&quot;&gt;,&lt;/span&gt; ArgumentList &lt;span class=&quot;token operator&quot;&gt;&amp;amp;&lt;/span&gt;args&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;token punctuation&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;token keyword&quot;&gt;auto&lt;/span&gt; &lt;span class=&quot;token operator&quot;&gt;&amp;amp;&lt;/span&gt;instance &lt;span class=&quot;token operator&quot;&gt;=&lt;/span&gt; obj&lt;span class=&quot;token punctuation&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;token function&quot;&gt;GetValue&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+
+    &lt;span class=&quot;token keyword&quot;&gt;return&lt;/span&gt; Variant &lt;span class=&quot;token punctuation&quot;&gt;{&lt;/span&gt;
+        instance&lt;span class=&quot;token punctuation&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;token function&quot;&gt;someMethod&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;
+            args&lt;span class=&quot;token punctuation&quot;&gt;[&lt;/span&gt; &lt;span class=&quot;token number&quot;&gt;0&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;]&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;token function&quot;&gt;GetValue&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+        &lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;That’s it! It’s much less complicated than the previously mentioned approach. This concept is also applied to fields / globals with their getters and setters.&lt;/p&gt;
+&lt;p&gt;There are some downsides though:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Larger code size. For each generated lambda, the compiler has to generate a bunch of symbols behind the scenes.&lt;/li&gt;
+&lt;li&gt;Larger compile times.&lt;/li&gt;
+&lt;li&gt;Decent amount of indirection just for one function call.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;You shouldn’t have to worry &lt;strong&gt;too&lt;/strong&gt; much however. If like most people, you use reflection for editor functionality, not a physics simulation. Performance in most cases is not critical.&lt;/p&gt;
+&lt;p&gt;Here’s a more complete example of dynamically calling functions with the runtime library.&lt;/p&gt;
+&lt;div class=&quot;gatsby-highlight&quot; data-language=&quot;cpp&quot;&gt;&lt;pre class=&quot;language-cpp&quot;&gt;&lt;code class=&quot;language-cpp&quot;&gt;&lt;span class=&quot;token keyword&quot;&gt;struct&lt;/span&gt; &lt;span class=&quot;token class-name&quot;&gt;SoundEffect&lt;/span&gt;
+&lt;span class=&quot;token punctuation&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;token keyword&quot;&gt;float&lt;/span&gt; volume&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+
+    &lt;span class=&quot;token keyword&quot;&gt;void&lt;/span&gt; &lt;span class=&quot;token function&quot;&gt;Load&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;token keyword&quot;&gt;const&lt;/span&gt; std&lt;span class=&quot;token operator&quot;&gt;::&lt;/span&gt;string &lt;span class=&quot;token operator&quot;&gt;&amp;amp;&lt;/span&gt;filename&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+
+&lt;span class=&quot;token keyword&quot;&gt;int&lt;/span&gt; &lt;span class=&quot;token function&quot;&gt;main&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;token keyword&quot;&gt;void&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;token punctuation&quot;&gt;{&lt;/span&gt;
+    Type soundEffectType &lt;span class=&quot;token operator&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;token function&quot;&gt;typeof&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt; SoundEffect &lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+    Field volumeField &lt;span class=&quot;token operator&quot;&gt;=&lt;/span&gt; soundEffectType&lt;span class=&quot;token punctuation&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;token function&quot;&gt;GetField&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt; &lt;span class=&quot;token string&quot;&gt;&quot;volume&quot;&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+
+    &lt;span class=&quot;token comment&quot;&gt;// the runtime supports overloading, but by default returns the first overload&lt;/span&gt;
+    Method loadMethod &lt;span class=&quot;token operator&quot;&gt;=&lt;/span&gt; soundEffectType&lt;span class=&quot;token punctuation&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;token function&quot;&gt;GetMethod&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt; &lt;span class=&quot;token string&quot;&gt;&quot;Load&quot;&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+
+    &lt;span class=&quot;token comment&quot;&gt;// creates an instance of a sound effect&lt;/span&gt;
+    Variant effect &lt;span class=&quot;token operator&quot;&gt;=&lt;/span&gt; soundEffectType&lt;span class=&quot;token punctuation&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;token function&quot;&gt;Create&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+
+    &lt;span class=&quot;token comment&quot;&gt;// effect.volume is now 85&lt;/span&gt;
+    volumeField&lt;span class=&quot;token punctuation&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;token function&quot;&gt;SetValue&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt; effect&lt;span class=&quot;token punctuation&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;token number&quot;&gt;85.0f&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+
+    &lt;span class=&quot;token comment&quot;&gt;// 85&lt;/span&gt;
+    volumeField&lt;span class=&quot;token punctuation&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;token function&quot;&gt;GetValue&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt; effect &lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+
+    &lt;span class=&quot;token comment&quot;&gt;// effect.Load is called&lt;/span&gt;
+    loadMethod&lt;span class=&quot;token punctuation&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;token function&quot;&gt;Invoke&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;(&lt;/span&gt; effect&lt;span class=&quot;token punctuation&quot;&gt;,&lt;/span&gt; std&lt;span class=&quot;token operator&quot;&gt;::&lt;/span&gt;string &lt;span class=&quot;token punctuation&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;token string&quot;&gt;&quot;Explosion.wav&quot;&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+
+    &lt;span class=&quot;token keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;token number&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;token punctuation&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;token punctuation&quot;&gt;}&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;</content:encoded></item></channel></rss>
