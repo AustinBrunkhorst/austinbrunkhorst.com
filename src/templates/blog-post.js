@@ -10,6 +10,7 @@ import GiveShakaButton from "../components/give-shaka-button"
 import usePostShakas from "../hooks/use-post-shakas"
 
 const ShakaHint = styled.div`
+  margin-top: 12px;
   opacity: 0.8;
 `
 

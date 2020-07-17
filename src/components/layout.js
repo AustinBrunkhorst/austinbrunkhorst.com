@@ -1,8 +1,15 @@
 import React from "react"
 import { Link } from "gatsby"
+import { createGlobalStyle } from "styled-components"
 
 import { rhythm, scale } from "../utils/typography"
 import ImageGrid from "./image-grid"
+
+const GlobalStyle = createGlobalStyle`
+  .anchor {
+    box-shadow: none;
+  }
+`
 
 class Layout extends React.Component {
   render() {
@@ -54,6 +61,7 @@ class Layout extends React.Component {
     }
     return (
       <>
+        <GlobalStyle />
         <ImageGrid />
         <div
           style={{

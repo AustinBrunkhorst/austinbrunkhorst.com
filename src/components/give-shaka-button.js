@@ -1,6 +1,6 @@
 import React, { useState, useCallback, memo, useEffect, useRef, useMemo } from "react"
 import styled from "styled-components"
-import { animated, Transition, useTransition, useChain } from "react-spring"
+import { animated, useTransition } from "react-spring"
 import { scale } from "../utils/typography"
 import shuffle from "shuffle-array"
 
@@ -11,8 +11,6 @@ const Button = styled.button`
   position: relative;
   min-width: 75px;
 `
-
-const Label = styled.div``
 
 const Total = styled.span`
   border-radius: 50%;
@@ -105,7 +103,7 @@ function useParticles() {
 
 const Particles = ({ particles }) => {
   const transitions = useTransition(particles, ({ id }) => id, {
-    from: ({ scale }) => ({
+    from: () => ({
       opacity: 0,
       transform: `scale(0) translate3d(0px, 0px, 0)`
     }),

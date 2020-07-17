@@ -10,6 +10,7 @@ tags: ["c", "reflection", "meta", "introspection", "code-generation", "clang", "
 I set out this summer (*2015*) to implement a flexible reflection system for the game project I'm working on. This repository contains a skeleton for parts of the system that I prototyped throughout the summer. With the proper dependencies and build system setup, you should have enough to integrate into your engine / application without much fuss.
 
 ## Quick Intro
+
 As a statically typed language, C++ wasn't designed to facilitate runtime type information. Instead, it's crazy fast and optimization friendly. Games are performance critical applications - it is for this reason that C++ is basically the standard backend.
 
 Type introspection is crucial for complex / large code bases that need to interface with tools (*i.e. a game editor*). Unless you're a team of all programmers (*I'm sorry if that's the case*) it is effectively impossible to iterate upon a larger game without some set of tools to abstract away code (*especially in 3D*). Without type introspection, you can expect to copy and paste a lot of boilerplate code. This is **absurdly** tedious and undesirable.
@@ -32,15 +33,18 @@ Here are a few links that cover more specifics on the concept (*specifically in 
 
 ## Goals
 
-##### Make the pipeline as hands off as possible.
+### Make the pipeline as hands off as possible
+
 Specifically, you shouldn't have to jump through a bunch of hoops just to expose your code to the reflection runtime library. Make changes to your code, recompile, and the changes are reflected immediately (*yep, it was intended*).
 
 No extra button clicks or steps to synchronize the reflection data.
 
-##### Provide rich functionality in the runtime library.
+### Provide rich functionality in the runtime library
+
 If we're going through all this trouble in the first place, might as well make it worth while!
 
-##### Avoid huge build times.
+### Avoid huge build times
+
 We're effectively compiling our code twice. First to parse our code base and understand it as intricately as a compiler does, then to *actually* compile it as per usual (*with the addition of our generated source*).
 
 This is one of the downsides to the generation approach. Instead of manually writing these macros inline with our source, we're using the brains of a compiler. However, we would much rather sacrifice a little bit shorter build times for the luxury of cleaner, less cluttered code.
@@ -134,6 +138,7 @@ add_custom_command(
 ```
 
 ### String Templates
+
 Generating code is usually a pretty ugly process.
 
 Instead of writing the characters manually (i.e. `output += "REGISTER_FUNCTION(" + name + ")"` ), I wanted to use *"String Templates"*. That is why I chose [Mustache](https://mustache.github.io/). I found a simple [header only implemenation](https://github.com/kainjow/Mustache), which is included in the [Parser](https://github.com/AustinBrunkhorst/CPP-Reflection/blob/master/Source/Parser/Mustache.h) section.
@@ -143,6 +148,7 @@ In the **Generate Source Files** section of the pipeline diagram, you'll notice 
 In the [Templates](https://github.com/AustinBrunkhorst/CPP-Reflection/tree/master/Templates) folder of the repository, you'll find the mustache template files referenced in the reflection parser.
 
 ### Type Meta Data
+
 One of the biggest features that I wanted to implement in the runtime library is being able to add meta data to types at compile time.
 
 If you've ever used C#, you know they have a pretty groovy reflection system built into the language. I really like their syntax for [Attributes](http://www.tutorialspoint.com/csharp/csharp_attributes.htm), which is a way to add meta data to language types / constructs.
